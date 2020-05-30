@@ -1,0 +1,18 @@
+JFileChooser chooser = new JFileChooser();
+        chooser.addChoosableFileFilter(new ImageExtension());
+        chooser.setAcceptAllFileFilterUsed(false);
+
+        int option = chooser.showOpenDialog(null);
+        if (option == JFileChooser.APPROVE_OPTION) {
+            this.imageTestPath = chooser.getSelectedFile().getAbsolutePath();
+            this.imageTestField.setText(imageTestPath);
+            icon = new ImageIcon(imageTestPath);
+            int width = imageLabelTest.getWidth();
+            int height = imageLabelTest.getHeight();
+            Image scaled = icon.getImage().getScaledInstance(width, height, Image.SCALE_SMOOTH);
+            scaledIcon = new ImageIcon(scaled);
+            imageLabelTest.setIcon(scaledIcon);
+            currentStatusText.setText("Image test import : SUCCESS");
+        } else {
+            currentStatusText.setText("Image test import : FAIL");
+        }

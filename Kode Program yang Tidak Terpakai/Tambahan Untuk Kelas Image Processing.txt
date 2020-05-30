@@ -1,0 +1,258 @@
+public void doCannyEdgeDetection() {
+        dst = new Mat(); //reset object
+        srcBlur = new Mat();
+        //Pre Processing
+        greyImage = new Mat();
+        detectedEdges = new Mat();
+        Imgproc.cvtColor(src, greyImage, Imgproc.COLOR_BGR2GRAY);//convert gambar ke grayscale
+        Imgproc.GaussianBlur(greyImage, srcBlur, BLUR_SIZE, 100);//apply gaussian blur
+//        System.out.println(this.threshold+","+KERNEL_SIZE);
+//        System.out.println(srcBlur.size());
+        Imgproc.Canny(srcBlur, detectedEdges, this.threshold, this.threshold, KERNEL_SIZE, false);//apply canny edge detection
+}
+
+public void doClustering() {
+        //Create New Matrix to Convert BGR to CIE LAB
+        image_lab = new Mat();
+
+        Imgproc.cvtColor(out_2, image_lab, Imgproc.COLOR_BGR2Lab);
+        
+        //Take pixel with no black color
+        List<double[]> temp = new ArrayList<>();
+        for (int i = 0; i < image_lab.rows(); i++) {
+            for (int j = 0; j < image_lab.cols(); j++) {
+                double[] value = image_lab.get(i, j);
+                if (value[0] != 0.0 && value[1] != 128.0 && value[2] != 128.0) {
+                    temp.add(value);
+                }
+            }
+        }
+
+        //Convert from ArrayList to Matrix
+        filtered_pixel = new Mat(1, temp.size(), CvType.CV_8UC3);
+        for (int i = 0; i < temp.size(); i++) {
+            filtered_pixel.put(0, i, temp.get(i));
+        }
+
+        //Reshape to 2D matrix
+        samples = filtered_pixel.reshape(1, filtered_pixel.cols() * filtered_pixel.rows());
+
+        samples32f = new Mat();
+        samples.convertTo(samples32f, CvType.CV_32F);
+        TermCriteria term = new TermCriteria(TermCriteria.COUNT, 100, 1);
+
+        //Create Matrix to Put Labels
+        labels = new Mat();
+        //Create Matrix to Put Centers (Centroids)
+        centers = new Mat();
+        //Running K-Means Clustering Algorithm
+        Core.kmeans(samples32f, this.cluster, labels, term, 1, Core.KMEANS_PP_CENTERS, centers);
+
+        //Print All Centers
+//        if (logText != null) {
+//            logText.setText(logText.getText() + "\n" + "Centers: " + "\n" + centers.dump());
+//        }
+//        System.out.println("Centers: " + "\n" + centers.dump());
+        
+        //Calculate Intra Cluster Distance
+//        if (logText != null) {
+//            logText.setText(logText.getText() + "\n" + "==============================================");
+//        }
+//        System.out.println("==============================================");
+
+        //Get Each L, a, and b Value On One Cluster
+        intraTotalValue = new double[centers.rows()][2]; //[x][0] simppan total 'jarak euclidean' dari seluruh anggota cluster dengan centroid, x[0][1] simpan total anggota
+        for (int i = 0; i < samples.rows(); i++) {
+            double[] labCenterValueL = centers.get((int) (labels.get(i, 0))[0], 0);
+            double[] labCenterValueA = centers.get((int) (labels.get(i, 0))[0], 1);
+            double[] labCenterValueB = centers.get((int) (labels.get(i, 0))[0], 2);
+            double distEuclid = Math.sqrt(Math.pow((samples.get(i, 0))[0] - labCenterValueL[0], 2)
+                    + Math.pow((samples.get(i, 1))[0] - labCenterValueA[0], 2)
+                    + Math.pow((samples.get(i, 2))[0] - labCenterValueB[0], 2));
+            intraTotalValue[(int) (labels.get(i, 0))[0]][0] = intraTotalValue[(int) (labels.get(i, 0))[0]][0] + distEuclid;
+            intraTotalValue[(int) (labels.get(i, 0))[0]][1] = intraTotalValue[(int) (labels.get(i, 0))[0]][1] + 1;
+        }
+
+//        System.out.println("Intra Cluster Distance Value");
+//        if (logText != null) {
+//            logText.setText(logText.getText() + "\n" + "Intra Cluster Distance Value");
+//        }
+        intraClusterDistanceValue = new double[centers.rows()];
+        count_idx = 0;
+        for (double[] tes : intraTotalValue) {
+            intraClusterDistanceValue[count_idx] = tes[0] / tes[1];
+//            System.out.println(tes[0] / tes[1]);
+//            if (logText != null) {
+//                logText.setText(logText.getText() + "\n" + (tes[0] / tes[1]));
+//            }
+            count_idx++;
+        }
+}
+
+public double[][] findDominantColor() {
+        Map<Integer, Double> dominantColor = new HashMap<Integer, Double>();
+        //Find Dominant Color
+//        if (logText != null) {
+//            logText.setText(logText.getText() + "\n" + "==============================================");
+//            logText.setText(logText.getText() + "\n" + "Dominant Colors:");
+//        }
+//        System.out.println("==============================================");
+//        System.out.println("Dominant Colors:");
+        double intraClusterDistance2 = 0;
+        double labClusterValue2 = 0;
+        double score = 0;
+        for (int i = 0; i < centers.rows(); i++) { //hitung nilai atau skor setiap cluster seberapa bagus, dengan menghitung nilai intra cluster distance tiap anggota * bobot kontribusi + total anggota suatu cluster * bobot kontribusi 
+            intraClusterDistance2 = Math.pow((1 / intraClusterDistanceValue[i]), 0.3); //total nilai intra cluster seluruh anggota suatu cluster
+            labClusterValue2 = Math.pow((intraTotalValue[i][1] / samples.rows()), 0.7); // jumlah anggota cluster
+            score = intraClusterDistance2 + labClusterValue2;
+            dominantColor.put(i, score);
+        }
+        
+        Map<Integer, Double> sorted = dominantColor.entrySet().stream()
+                .sorted(Map.Entry.comparingByValue(Comparator.reverseOrder()))
+                .collect(Collectors.toMap(Map.Entry::getKey,
+                        Map.Entry::getValue, (e1, e2) -> e1, LinkedHashMap::new));
+        
+        //Print sortedmap
+//        for (Map.Entry<Integer, Double> en : sorted.entrySet()) {
+//            if (logText != null) {
+//                logText.setText(logText.getText() + "\n" + "Key (Cluster) = " + en.getKey() + ", Value = " + en.getValue());
+//            }
+//            System.out.println("Key (Cluster) = " + en.getKey() + ", Value = " + en.getValue());
+//        }
+        //Get 5 Dominant Color
+        double[][] vector_image = new double[this.dominant][3];
+        count_idx = 0;
+        for (Map.Entry<Integer, Double> en : sorted.entrySet()) {
+            if (count_idx == this.dominant) {
+                break;
+            }
+            vector_image[count_idx][0] = (centers.get(en.getKey(), 0))[0];
+            vector_image[count_idx][1] = (centers.get(en.getKey(), 1))[0];
+            vector_image[count_idx][2] = (centers.get(en.getKey(), 2))[0];
+            count_idx++;
+        }
+
+        //Debug and Print the 5 Vector Image
+//        count_idx = 0;
+//        for (double[] tes : vector_image) {
+//            if (logText != null) {
+//                logText.setText(logText.getText() + "\n" + "vektor: " + (count_idx + 1) + "\n" + tes[0] + "\n" + tes[1] + "\n" + tes[2] + "\n============================");
+//            }
+//            System.out.println("vektor: " + (count_idx + 1));
+//            System.out.println(tes[0]);
+//            System.out.println(tes[1]);
+//            System.out.println(tes[2]);
+//            System.out.println("============================");
+//            count_idx++;
+//        }
+        return vector_image;
+}
+
+public void doPermutation(int a[], int size, int n) {
+        if (size == 1) {
+            //do calculate euclidean
+            double totalRes = 0.0;
+            for (int i = 0; i < a.length; i++) {
+                totalRes += Math.sqrt(Math.pow(vectorTest[i][0] - vectorTrain[a[i]][0], 2)
+                        + Math.pow(vectorTest[i][1] - vectorTrain[a[i]][1], 2)
+                        + Math.pow(vectorTest[i][2] - vectorTrain[a[i]][2], 2));
+            }
+            if (totalRes < maxRes) {
+                maxRes = totalRes;
+            }
+            //Uncommand to see the Permutation for each vector in every image
+            //System.out.printf("Permutation-%d result: %.3f --- bestRes: %.3f\n",count_idx,totalRes,maxRes);
+            count_idx++;
+        }
+
+        for (int i = 0; i < size; i++) {
+            doPermutation(a, size - 1, n);
+
+            if (size % 2 == 1) {
+                int temp = a[0];
+                a[0] = a[size - 1];
+                a[size - 1] = temp;
+            } else {
+                int temp = a[i];
+                a[i] = a[size - 1];
+                a[size - 1] = temp;
+            }
+        }
+}
+
+public double[][] extractFeature(String pathTest, int typeOfFolder, int typeToShowImage) {
+        String imagePath = pathTest;
+        src = Imgcodecs.imread(imagePath);
+        if (src.empty()) {
+            System.out.println("Empty image: " + imagePath);
+            System.exit(0);
+        }
+        // Create and set up the window.
+        if (typeToShowImage > 0) {
+            if (typeOfFolder > 0) {
+                System.out.println("Data Test Result:");
+                frame = new JFrame("Processing Image");
+
+                frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+                // Set up the content pane.
+                Image img = HighGui.toBufferedImage(src);
+
+                addComponentsToPane(frame.getContentPane(), img);
+                // Use the content pane's default BorderLayout. No need for
+                // setLayout(new BorderLayout());
+                // Display the window.
+                frame.pack();
+                frame.setLocationRelativeTo(null);
+                frame.setVisible(true);
+            }
+        }
+
+        doCannyEdgeDetection();
+        doDilation();
+        drawContours();
+        doMasking();
+        doClustering();
+        double[][] res = findDominantColor();
+
+        //done
+        Image img = HighGui.toBufferedImage(out_2);
+        if (imgLabel != null && frame != null) {
+            imgLabel.setIcon(new ImageIcon(img));
+            frame.repaint();
+        }
+        
+        //Debug
+        //Display Square Color of Centroid (OPTIONAL, Uncommand to See the Result)
+//        if(typeOfFolder==1){
+//        for (int i = 0; i < res.length; i++) {
+//            Scalar lab = new Scalar(res[i][0],res[i][1],res[i][2]);
+//            System.out.println("SCALAR: "+lab.val[0]+","+lab.val[1]+","+lab.val[2]);
+//            Mat square = new Mat(50,50,16,lab);
+//            Mat converted = new Mat();
+//            Imgproc.cvtColor(square, converted, Imgproc.COLOR_Lab2BGR);
+//            
+//            System.out.println(converted.dump());    
+//            
+//            String[] temp = pathTest.split("/");
+//            
+//            if(type==0){
+//                originalFrame = new JFrame("Square Image - Train Data:"+temp[temp.length-1]);
+//            } else originalFrame = new JFrame("Square Image - Test Data:"+temp[temp.length-1]);
+//            frame = new JFrame("Warna Dominan");
+//            frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+//            
+//            // Set up the content pane.
+//            img = HighGui.toBufferedImage(converted);
+//
+//            addComponentsToPane(frame.getContentPane(), img);
+//            // Use the content pane's default BorderLayout. No need for
+//            // setLayout(new BorderLayout());
+//            // Display the window.
+//            frame.pack();
+//            frame.setLocationRelativeTo(null);
+//            frame.setVisible(true);
+//            
+//        }}
+        return res;
+}

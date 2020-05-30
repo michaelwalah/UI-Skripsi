@@ -1,0 +1,16 @@
+//        sliderPanel.add(new JLabel("Min Threshold:"));
+//        JSlider slider = new JSlider(0, MAX_LOW_THRESHOLD, 0);
+//        slider.setMajorTickSpacing(10);
+//        slider.setMinorTickSpacing(5);
+//        slider.setPaintTicks(true);
+//        slider.setPaintLabels(true);
+//        slider.addChangeListener(new ChangeListener() {
+//            @Override
+//            public void stateChanged(ChangeEvent e) {
+//                JSlider source = (JSlider) e.getSource();
+//                lowThresh = source.getValue();
+//                update();
+//            }
+//        });
+//        sliderPanel.add(slider);
+//        pane.add(sliderPanel, BorderLayout.PAGE_START);
